@@ -5,5 +5,6 @@ if [ -z "$1" ]; then
   exit 1
 fi
 # Update title back to working status when using this
+bash /home/lxw/.gemini/skills/workspace_manager/scripts/set_title.sh "mario_demo" "level2" "Finishing..."
 bash /home/lxw/.gemini/skills/workspace_manager/scripts/set_title.sh "mario_demo" "underwater" "Finishing..."
 python3 /home/lxw/.gemini/skills/workspace_manager/scripts/clone_commit_push.py "$1"
