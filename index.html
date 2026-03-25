@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mario Multiverse</title>
+    <style>
+        body { margin: 0; background: #222; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; font-family: sans-serif; color: white; overflow: hidden; }
+        canvas { background: #87CEEB; border: 4px solid #fff; box-shadow: 0 0 20px rgba(0,0,0,0.5); image-rendering: pixelated; }
+        #ui { position: absolute; top: 20px; text-align: center; pointer-events: none; text-shadow: 2px 2px 0 #000; }
+        #loading { position: absolute; font-size: 24px; color: #fff; }
+        .controls { margin-top: 10px; font-size: 14px; color: #aaa; }
+    </style>
+</head>
+<body>
+    <div id="ui">
+        <h2 id="level-title">Multiverse Hub</h2>
+        <p id="level-desc">Select a level or pass ?level=name</p>
+    </div>
+    <div id="loading">Initializing Core Engine...</div>
+    <canvas id="gameCanvas" width="800" height="600" style="display:none;"></canvas>
+    <div class="controls">Arrow Keys to Move | Space to Jump</div>
+
+    <script>
+        // --- CORE ARCHITECTURE (DO NOT MODIFY IN AVATAR WORKSPACES) ---
+        // This engine uses an IoC (Inversion of Control) pattern.
+        // Avatars register level definitions, and the engine runs them.
+        window.LevelRegistry = {};
+
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const loading = document.getElementById('loading');
+
+        // Global State
+        const keys = {};
+        window.addEventListener('keydown', e => keys[e.code] = true);
+        window.addEventListener('keyup', e => keys[e.code] = false);
+
+        // Core Player Class (Can be extended/overridden by Level Config)
+        class Player {
+            constructor(x, y) {
+                this.x = x; this.y = y;
+                this.width = 30; this.height = 30;
+                this.vx = 0; this.vy = 0;
+                this.color = '#ff0000';
+                this.grounded = false;
+            }
+            update(physics, platforms) {
+                // Apply physics
+                this.vy += physics.gravity;
+                this.vy *= physics.frictionY || 1;
+                this.vx *= physics.frictionX || 0.8;
+                this.x += this.vx;
+                this.y += this.vy;
+
+                // Input
+                if (keys['ArrowLeft']) this.vx -= physics.speed;
+                if (keys['ArrowRight']) this.vx += physics.speed;
+                if (keys['Space'] && this.grounded) {
+                    this.vy = -physics.jumpForce;
+                    this.grounded = false;
+                }
+
+                // Collision Detection (Basic)
+                this.grounded = false;
+                for (let p of platforms) {
+                    if (this.x < p.x + p.w && this.x + this.width > p.x &&
+                        this.y + this.height > p.y && this.y + this.height < p.y + p.h + 10 && this.vy >= 0) {
+                        this.y = p.y - this.height;
+                        this.vy = 0;
+                        this.grounded = true;
+                    }
+                }
+
+                // Screen bounds
+                if (this.y > canvas.height) this.y = 0; // Fall from sky
+                if (this.x < 0) this.x = 0;
+                if (this.x + this.width > canvas.width) this.x = canvas.width - this.width;
+            }
+            draw(ctx) {
+                ctx.fillStyle = this.color;
+                ctx.fillRect(this.x, this.y, this.width, this.height);
+            }
+        }
+
+        // --- ENGINE LOOP ---
+        let currentConfig = null;
+        let player = null;
+        let animationId = null;
+
+        function initEngine(levelName) {
+            currentConfig = window.LevelRegistry[levelName];
+            if (!currentConfig) {
+                loading.innerText = `Level [${levelName}] not found or not registered!`;
+                return;
+            }
+            
+            // Apply visual signature
+            document.getElementById('level-title').innerText = currentConfig.title;
+            document.getElementById('level-desc').innerText = currentConfig.description;
+            canvas.style.background = currentConfig.backgroundColor || '#87CEEB';
+            
+            player = new Player(100, 100);
+            if (currentConfig.onInit) currentConfig.onInit(player);
+            
+            loading.style.display = 'none';
+            canvas.style.display = 'block';
+            
+            if (animationId) cancelAnimationFrame(animationId);
+            gameLoop();
+        }
+
+        function gameLoop() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Allow level to inject custom background render
+            if (currentConfig.renderBackground) currentConfig.renderBackground(ctx);
+
+            // Draw platforms
+            ctx.fillStyle = currentConfig.platformColor || '#4CAF50';
+            currentConfig.platforms.forEach(p => ctx.fillRect(p.x, p.y, p.w, p.h));
+
+            // Update & Draw Entities
+            if (currentConfig.onUpdate) currentConfig.onUpdate(player, keys);
+            player.update(currentConfig.physics, currentConfig.platforms);
+            player.draw(ctx);
+
+            // Allow level to inject custom foreground render (enemies, traps, UI)
+            if (currentConfig.renderForeground) currentConfig.renderForeground(ctx, player);
+
+            // Level Complete check
+            if (currentConfig.checkWin && currentConfig.checkWin(player)) {
+                ctx.fillStyle = "rgba(0,0,0,0.5)";
+                ctx.fillRect(0,0,canvas.width, canvas.height);
+                ctx.fillStyle = "white";
+                ctx.font = "40px sans-serif";
+                ctx.fillText("Level Complete!", canvas.width/2 - 140, canvas.height/2);
+                
+                // Demo chaining logic hook
+                if(window.parentLevelCompleteHook) {
+                    window.parentLevelCompleteHook(currentConfig.name);
+                }
+                return;
+            }
+
+            animationId = requestAnimationFrame(gameLoop);
+        }
+
+        // --- DYNAMIC MODULE LOADER (Zero-Conflict Parallelism) ---
+        // Dynamically loads the level JS file requested via URL parameter.
+        const urlParams = new URLSearchParams(window.location.search);
+        const targetLevel = urlParams.get('level');
+
+        if (targetLevel) {
+            const script = document.createElement('script');
+            script.src = `level_${targetLevel}.js`;
+            script.onload = () => initEngine(targetLevel);
+            script.onerror = () => { loading.innerText = `Failed to load level_${targetLevel}.js`; };
+            document.head.appendChild(script);
+        } else {
+            // Default Demo Hub State
+            window.LevelRegistry['hub'] = {
+                name: 'hub', title: 'Multiverse Hub', description: 'Add ?level=water, lava, or sky to URL',
+                physics: { gravity: 0.5, speed: 0.5, jumpForce: 10, frictionX: 0.8, frictionY: 1 },
+                platforms: [{x: 50, y: 500, w: 700, h: 40}],
+            };
+            initEngine('hub');
+        }
+    </script>
+</body>
+</html>
