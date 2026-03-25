@@ -18,10 +18,41 @@
         <p id="level-desc">Select a level or pass ?level=name</p>
     </div>
     <div id="loading">Initializing Core Engine...</div>
+    <div id="transition-modal" style="display:none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.9); border: 2px solid white; padding: 30px; text-align: center; z-index: 100; box-shadow: 0 0 50px #000;">
+        <h1 id="modal-title" style="color: gold; margin-bottom: 10px;">LEVEL CLEAR!</h1>
+        <p id="modal-msg" style="margin-bottom: 20px;">You reached the flagpole!</p>
+        <button id="next-btn" style="padding: 10px 30px; font-size: 18px; cursor: pointer; background: #4CAF50; color: white; border: none; border-radius: 5px;">PROCEED TO NEXT DIMENSION</button>
+    </div>
     <canvas id="gameCanvas" width="800" height="600" style="display:none;"></canvas>
     <div class="controls">Arrow Keys to Move | Space to Jump</div>
 
     <script>
+        // --- TRANSITION SYSTEM (NEW IN V2.0) ---
+        window.showTransition = function(nextLevelName) {
+            const modal = document.getElementById('transition-modal');
+            const nextBtn = document.getElementById('next-btn');
+            const modalTitle = document.getElementById('modal-title');
+            const modalMsg = document.getElementById('modal-msg');
+            
+            modal.style.display = 'block';
+            
+            if (nextLevelName) {
+                modalTitle.innerText = "LEVEL CLEAR!";
+                modalMsg.innerText = `You reached the flagpole! Next destination: [${nextLevelName}]`;
+                nextBtn.innerText = "PROCEED TO NEXT DIMENSION";
+                nextBtn.onclick = () => {
+                    window.location.href = `?level=${nextLevelName}`;
+                };
+            } else {
+                modalTitle.innerText = "MULTIVERSE CONQUERED!";
+                modalMsg.innerText = "You have cleared all levels in this demo.";
+                nextBtn.innerText = "RETURN TO HUB";
+                nextBtn.onclick = () => {
+                    window.location.href = `index.html`;
+                };
+            }
+        };
+
         // --- CORE ARCHITECTURE (DO NOT MODIFY IN AVATAR WORKSPACES) ---
         // This engine uses an IoC (Inversion of Control) pattern.
         // Avatars register level definitions, and the engine runs them.
